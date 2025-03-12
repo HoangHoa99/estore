@@ -1,0 +1,9 @@
+version: '3.8'
+
+services:
+  server:
+    container_name: estore
+    image: estore
+    build: ./
+    ports:
+        - "8080:8080"
