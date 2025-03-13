@@ -7,12 +7,10 @@ import jakarta.persistence.MappedSuperclass;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Version;
-import lombok.Data;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
 
-@Data
 @MappedSuperclass
 public abstract class BaseEntity {
 
@@ -30,6 +28,38 @@ public abstract class BaseEntity {
     @Version
     @Column(name = "version")
     private Long version;
+
+    public UUID getId() {
+        return id;
+    }
+
+    public void setId(UUID id) {
+        this.id = id;
+    }
+
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setCreatedAt(LocalDateTime createdAt) {
+        this.createdAt = createdAt;
+    }
+
+    public LocalDateTime getUpdatedAt() {
+        return updatedAt;
+    }
+
+    public void setUpdatedAt(LocalDateTime updatedAt) {
+        this.updatedAt = updatedAt;
+    }
+
+    public Long getVersion() {
+        return version;
+    }
+
+    public void setVersion(Long version) {
+        this.version = version;
+    }
 
     @PrePersist
     protected void onCreate() {
