@@ -7,6 +7,7 @@ import assessment.estore.model.dto.response.GetProductsResponse;
 import assessment.estore.model.dto.response.ProductDetailResponse;
 import assessment.estore.repository.ProductRepository;
 import assessment.estore.service.ProductService;
+import assessment.estore.util.StringUtil;
 import org.apache.logging.log4j.util.Strings;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -62,7 +63,7 @@ public class ProductServiceImpl implements ProductService {
     @Transactional
     public Boolean deleteProduct(String productId) {
         try {
-            UUID uuid = safeParseUUID(productId);
+            UUID uuid = StringUtil.safeParseUUID(productId);
             if (uuid == null) {
                 return false;
             }
@@ -83,7 +84,7 @@ public class ProductServiceImpl implements ProductService {
 
     @Override
     public ProductDetailResponse getProduct(String productId) {
-        UUID uuid = safeParseUUID(productId);
+        UUID uuid = StringUtil.safeParseUUID(productId);
         if (uuid == null) {
             return null;
         }
@@ -122,15 +123,6 @@ public class ProductServiceImpl implements ProductService {
             return response;
         } finally {
             lock.readLock().unlock();
-        }
-    }
-
-    private UUID safeParseUUID(String uuidString) {
-        try {
-            return UUID.fromString(uuidString);
-        } catch (IllegalArgumentException e) {
-            LOGGER.error("Invalid UUID format: {}", uuidString);
-            return null;
         }
     }
 
