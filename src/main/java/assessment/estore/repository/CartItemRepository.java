@@ -1,6 +1,6 @@
 package assessment.estore.repository;
 
-import assessment.estore.model.dao.Cart;
+import assessment.estore.model.dao.CartItem;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -11,7 +11,11 @@ import java.util.Optional;
 import java.util.UUID;
 
 @Repository
-public interface CartRepository extends JpaRepository<Cart, UUID> {
+public interface CartItemRepository extends JpaRepository<CartItem, UUID> {
+    Optional<CartItem> findByCartIdAndProductId(UUID cartId, UUID productId);
 
-    Optional<Cart> findCartByUserIdAndStatus(UUID userId, Cart.CartStatus status);
+    @Modifying
+    @Query(nativeQuery = true,
+            value = "DELETE FROM cart_item WHERE id = :cartItemId")
+    int deleteCartItem(@Param("cartItemId") UUID cartItemId);
 }

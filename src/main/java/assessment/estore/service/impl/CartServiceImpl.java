@@ -1,8 +1,408 @@
 package assessment.estore.service.impl;
 
+import assessment.estore.model.dao.Cart;
+import assessment.estore.model.dao.CartItem;
+import assessment.estore.model.dao.Discount;
+import assessment.estore.model.dao.Product;
+import assessment.estore.model.dto.request.CreateCartRequest;
+import assessment.estore.model.dto.request.ModifyCartRequest;
+import assessment.estore.model.dto.response.*;
+import assessment.estore.repository.CartItemRepository;
+import assessment.estore.repository.CartRepository;
+import assessment.estore.repository.DiscountRepository;
+import assessment.estore.repository.ProductRepository;
 import assessment.estore.service.CartService;
+import assessment.estore.util.StringUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.util.*;
 
 @Service
 public class CartServiceImpl implements CartService {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(CartServiceImpl.class);
+
+    private final CartRepository cartRepository;
+    private final ProductRepository productRepository;
+    private final DiscountRepository discountRepository;
+    private final CartItemRepository cartItemRepository;
+
+    public CartServiceImpl(CartRepository cartRepository, ProductRepository productRepository, DiscountRepository discountRepository, CartItemRepository cartItemRepository) {
+        this.cartRepository = cartRepository;
+        this.productRepository = productRepository;
+        this.discountRepository = discountRepository;
+        this.cartItemRepository = cartItemRepository;
+    }
+
+    @Override
+    @Transactional
+    public CreateCartResponse createCart(CreateCartRequest createCartRequest) {
+        CreateCartResponse createCartResponse = new CreateCartResponse();
+
+        try {
+            UUID userId = StringUtil.safeParseUUID(createCartRequest.getUserId());
+
+            if (userId == null) {
+                createCartResponse.setError(true);
+                createCartResponse.setMessage("Invalid user id");
+
+                return createCartResponse;
+            }
+
+            Optional<Cart> existedCart = cartRepository.findCartByUserIdAndStatus(userId, Cart.CartStatus.ACTIVE);
+
+            if (existedCart.isPresent()) {
+                createCartResponse.setCartId(existedCart.get().getId().toString());
+                createCartResponse.setMessage("Active cart already exists.");
+
+                return createCartResponse;
+            }
+
+            Cart cart = new Cart();
+            cart.setUserId(userId);
+            cart.setStatus(Cart.CartStatus.ACTIVE);
+
+            Cart savedCart = cartRepository.save(cart);
+
+            createCartResponse.setCartId(savedCart.getId().toString());
+            createCartResponse.setMessage("Successfully created cart.");
+        }
+        catch (Exception e) {
+            LOGGER.error("Error occurred while creating the cart", e);
+            createCartResponse.setMessage("Error occurred while creating the cart");
+            createCartResponse.setError(true);
+        }
+        return createCartResponse;
+    }
+
+    @Override
+    public GetCartResponse getCart(String cartId) {
+        GetCartResponse getCartResponse = new GetCartResponse();
+
+        try {
+            UUID id = StringUtil.safeParseUUID(cartId);
+
+            if (id == null) {
+                getCartResponse.setError(true);
+                getCartResponse.setMessage("Invalid cart ID format");
+                return getCartResponse;
+            }
+
+            Optional<Cart> cartOptional = cartRepository.findById(id);
+
+            if (cartOptional.isEmpty()) {
+                getCartResponse.setError(true);
+                getCartResponse.setMessage("Cart not found");
+                return getCartResponse;
+            }
+
+            Cart cart = cartOptional.get();
+
+            getCartResponse.setCartId(cart.getId().toString());
+            getCartResponse.setUserId(cart.getUserId().toString());
+            getCartResponse.setCartStatus(cart.getStatus().toString());
+
+            List<CartItemResponse> cartItems = new ArrayList<>();
+            for (CartItem item : cart.getItems()) {
+                CartItemResponse cartItemResponse = new CartItemResponse();
+                cartItemResponse.setItemId(item.getId().toString());
+                cartItemResponse.setProductId(item.getProduct().getId().toString());
+                cartItemResponse.setQuantity(item.getQuantity());
+
+                cartItems.add(cartItemResponse);
+            }
+
+            getCartResponse.setCartItems(cartItems);
+            getCartResponse.setMessage("Successfully retrieved cart.");
+        } catch (Exception e) {
+            LOGGER.error("Error retrieving cart with ID: {}", cartId, e);
+            getCartResponse.setError(true);
+            getCartResponse.setMessage("Error occurred while retrieving the cart");
+        }
+
+        return getCartResponse;
+    }
+
+    @Override
+    @Transactional
+    public BaseResponse addItemToCart(String cartId, ModifyCartRequest modifyCartRequest) {
+        BaseResponse response = new BaseResponse();
+
+        try {
+            // Validate IDs
+            UUID cartUuid = StringUtil.safeParseUUID(cartId);
+            UUID productUuid = StringUtil.safeParseUUID(modifyCartRequest.getProductId());
+
+            if (cartUuid == null || productUuid == null) {
+                response.setError(true);
+                response.setMessage("Invalid cart ID or product ID format");
+                return response;
+            }
+
+            // Check if cart exists
+            Optional<Cart> cartOptional = cartRepository.findById(cartUuid);
+            if (cartOptional.isEmpty()) {
+                response.setError(true);
+                response.setMessage("Cart not found");
+                return response;
+            }
+
+            Cart cart = cartOptional.get();
+
+            // Check if cart is active
+            if (cart.getStatus() != Cart.CartStatus.ACTIVE) {
+                response.setError(true);
+                response.setMessage("Cannot modify items in a non-active cart");
+                return response;
+            }
+
+            // Check if product exists
+            Optional<Product> productOptional = productRepository.findById(productUuid);
+            if (productOptional.isEmpty()) {
+                response.setError(true);
+                response.setMessage("Product not found");
+                return response;
+            }
+
+            Product product = productOptional.get();
+
+            // Check if the item already exists in the cart
+            CartItem cartItem = null;
+            for (CartItem item : cart.getItems()) {
+                if (item.getProduct().getId().equals(productUuid)) {
+                    cartItem = item;
+                    break;
+                }
+            }
+
+            // If item exists, update quantity, otherwise create new cart item
+            if (cartItem != null) {
+                cartItem.setQuantity(modifyCartRequest.getQuantity());
+                // Remove item if quantity is 0
+                if (cartItem.getQuantity() == 0) {
+                    cart.getItems().remove(cartItem);
+                    response.setMessage("Item removed from cart");
+                } else {
+                    response.setMessage("Cart item quantity updated");
+                }
+            } else {
+                // Only add if quantity > 0
+                if (modifyCartRequest.getQuantity() > 0) {
+                    cartItem = new CartItem();
+                    cartItem.setCart(cart);
+                    cartItem.setProduct(product);
+                    cartItem.setQuantity(modifyCartRequest.getQuantity());
+                    cart.getItems().add(cartItem);
+                    response.setMessage("Item added to cart");
+                } else {
+                    response.setMessage("No changes made (quantity was 0)");
+                }
+            }
+
+            // Save the cart with updated items
+            cartRepository.save(cart);
+
+        } catch (Exception e) {
+            LOGGER.error("Error modifying cart item", e);
+            response.setError(true);
+            response.setMessage("Error occurred while modifying cart item");
+        }
+
+        return response;
+    }
+
+    @Override
+    @Transactional
+    public BaseResponse removeItemFromCart(String cartId, String productId) {
+        BaseResponse response = new BaseResponse();
+
+        try {
+            // Validate IDs
+            UUID cartUuid = StringUtil.safeParseUUID(cartId);
+            UUID productUuid = StringUtil.safeParseUUID(productId);
+
+            if (cartUuid == null || productUuid == null) {
+                response.setError(true);
+                response.setMessage("Invalid cart ID or product ID format");
+                return response;
+            }
+
+            // Find the cart item directly using the repository
+            Optional<CartItem> cartItemOptional = cartItemRepository.findByCartIdAndProductId(cartUuid, productUuid);
+
+            if (cartItemOptional.isEmpty()) {
+                response.setMessage("Item not found in cart");
+            } else {
+                // Delete using the repository - this will handle the version correctly
+                cartItemRepository.deleteCartItem(cartItemOptional.get().getId());
+                response.setMessage("Item successfully removed from cart");
+            }
+
+        } catch (Exception e) {
+            LOGGER.error("Error removing cart item", e);
+            response.setError(true);
+            response.setMessage("Error occurred while removing cart item");
+        }
+
+        return response;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public ReceiptResponse getReceipt(String cartId) {
+        ReceiptResponse receiptResponse = new ReceiptResponse();
+
+        try {
+            // Validate cart ID
+            UUID cartUuid = StringUtil.safeParseUUID(cartId);
+
+            if (cartUuid == null) {
+                receiptResponse.setError(true);
+                receiptResponse.setMessage("Invalid cart ID format");
+                return receiptResponse;
+            }
+
+            // Check if cart exists
+            Optional<Cart> cartOptional = cartRepository.findById(cartUuid);
+            if (cartOptional.isEmpty()) {
+                receiptResponse.setError(true);
+                receiptResponse.setMessage("Cart not found");
+                return receiptResponse;
+            }
+
+            Cart cart = cartOptional.get();
+
+            // Create receipt items from cart items
+            List<ReceiptItem> receiptItems = new ArrayList<>();
+            BigDecimal subtotal = BigDecimal.ZERO;
+
+            for (CartItem cartItem : cart.getItems()) {
+                Product product = cartItem.getProduct();
+                int quantity = cartItem.getQuantity();
+                BigDecimal price = product.getPrice();
+
+                // Calculate item total before discount
+                BigDecimal itemSubtotal = price.multiply(BigDecimal.valueOf(quantity));
+                subtotal = subtotal.add(itemSubtotal);
+
+                // Create receipt item DTO
+                ReceiptItem receiptItem = new ReceiptItem();
+                receiptItem.setProductId(product.getId().toString());
+                receiptItem.setProductName(product.getProductName());
+                receiptItem.setQuantity(quantity);
+                receiptItem.setPrice(price);
+
+                // Find applicable discounts for this product
+                List<Discount> applicableDiscounts = discountRepository.findActiveDiscountsByProductId(product.getId());
+
+                if (!applicableDiscounts.isEmpty()) {
+                    // Apply the best discount (you could implement different strategies here)
+                    Discount bestDiscount = findBestDiscount(applicableDiscounts, quantity, price);
+
+                    if (bestDiscount != null) {
+                        BigDecimal discountAmount = calculateDiscountAmount(bestDiscount, quantity, price);
+
+                        receiptItem.setDiscountName(bestDiscount.getDiscountName());
+                        receiptItem.setDiscountAmount(discountAmount);
+                        receiptItem.setFinalPrice(itemSubtotal.subtract(discountAmount));
+
+                        // Create applied discount DTO
+                        AppliedDiscount appliedDiscount = new AppliedDiscount();
+                        appliedDiscount.setDiscountName(bestDiscount.getDiscountName());
+                        appliedDiscount.setDiscountAmount(discountAmount);
+
+                        receiptResponse.getAppliedDiscounts().add(appliedDiscount);
+                    } else {
+                        receiptItem.setFinalPrice(itemSubtotal);
+                    }
+                } else {
+                    receiptItem.setFinalPrice(itemSubtotal);
+                }
+
+                receiptItems.add(receiptItem);
+            }
+
+            // Calculate total with discounts applied
+            BigDecimal totalDiscount = receiptItems.stream()
+                    .map(item -> item.getDiscountAmount() != null ? item.getDiscountAmount() : BigDecimal.ZERO)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+            BigDecimal finalTotal = subtotal.subtract(totalDiscount);
+
+            // Set receipt details
+            receiptResponse.setCartId(cart.getId().toString());
+            receiptResponse.setItems(receiptItems);
+            receiptResponse.setSubtotal(subtotal);
+            receiptResponse.setTotalDiscount(totalDiscount);
+            receiptResponse.setFinalTotal(finalTotal);
+            receiptResponse.setMessage("Receipt generated successfully");
+
+        } catch (Exception e) {
+            LOGGER.error("Error generating receipt for cart ID: {}", cartId, e);
+            receiptResponse.setError(true);
+            receiptResponse.setMessage("Error occurred while generating receipt");
+        }
+
+        return receiptResponse;
+    }
+
+    // Helper method to find the best discount for a product
+    private Discount findBestDiscount(List<Discount> discounts, int quantity, BigDecimal price) {
+        if (discounts.isEmpty()) {
+            return null;
+        }
+
+        // Find discount that provides the maximum value
+        Discount bestDiscount = null;
+        BigDecimal maxDiscount = BigDecimal.ZERO;
+
+        for (Discount discount : discounts) {
+            if (!discount.isActive()) {
+                continue;
+            }
+
+            BigDecimal currentDiscountAmount = calculateDiscountAmount(discount, quantity, price);
+
+            if (currentDiscountAmount.compareTo(maxDiscount) > 0) {
+                maxDiscount = currentDiscountAmount;
+                bestDiscount = discount;
+            }
+        }
+
+        return bestDiscount;
+    }
+
+    // Helper method to calculate discount amount
+    private BigDecimal calculateDiscountAmount(Discount discount, int quantity, BigDecimal price) {
+        // For "Buy 1 Get 50% Off Second" type discounts
+        if (discount.getDiscountName().contains("Buy 1 Get 50% Off Second")) {
+            // Only apply if quantity is at least 2
+            if (quantity >= 2) {
+                // Only the second item gets 50% off
+                return price.multiply(discount.getDiscountValue()).divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
+            } else {
+                return BigDecimal.ZERO;
+            }
+        }
+
+        // For regular percentage discounts
+        else if (discount.getDiscountType() == Discount.DiscountType.PERCENTAGE) {
+            BigDecimal itemTotal = price.multiply(BigDecimal.valueOf(quantity));
+            return itemTotal.multiply(discount.getDiscountValue()).divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
+        }
+
+        // For fixed amount discounts
+        else if (discount.getDiscountType() == Discount.DiscountType.FIXED_AMOUNT) {
+            BigDecimal totalDiscount = discount.getDiscountValue().multiply(BigDecimal.valueOf(quantity));
+            BigDecimal itemTotal = price.multiply(BigDecimal.valueOf(quantity));
+            return totalDiscount.min(itemTotal);
+        }
+
+        return BigDecimal.ZERO;
+    }
 }
