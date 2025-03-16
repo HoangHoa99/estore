@@ -35,6 +35,11 @@ public class CartController {
     @GetMapping("/{cartId}")
     public ResponseEntity<GetCartResponse> getCart(@PathVariable String cartId) {
         GetCartResponse response = cartService.getCart(cartId);
+
+        if (response.getError()) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+        }
+
         return ResponseEntity.status(HttpStatus.OK).body(response);
     }
 
