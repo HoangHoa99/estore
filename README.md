@@ -2,6 +2,8 @@
 
 Backend implementation for electronics store.
 
+[Project description](./docs/Altech-Java_Backend_Technical_Assessment.pdf) 
+
 ## Requirements
 
 - Java 17
