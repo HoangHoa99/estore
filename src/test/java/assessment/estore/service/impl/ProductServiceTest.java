@@ -35,6 +35,8 @@ public class ProductServiceTest {
     private UUID validProductId;
     private Product testProduct;
     private CreateProductRequest createProductRequest;
+    private ProductDetailResponse invalidId;
+    private ProductDetailResponse productNotFound;
 
     @BeforeEach
     void setUp() {
@@ -52,6 +54,14 @@ public class ProductServiceTest {
         createProductRequest.setDescription("New Description");
         createProductRequest.setPrice(new BigDecimal("149.99"));
         createProductRequest.setStockQuantity(20);
+
+        invalidId = new ProductDetailResponse();
+        invalidId.setError(true);
+        invalidId.setMessage("Invalid product id");
+
+        productNotFound = new ProductDetailResponse();
+        productNotFound.setError(true);
+        productNotFound.setMessage("Product not found");
     }
 
     @Test
@@ -127,7 +137,10 @@ public class ProductServiceTest {
     void getProduct_InvalidUUID() {
         ProductDetailResponse response = productService.getProduct("invalid-uuid");
 
-        assertNull(response);
+        assertNotNull(response);
+        assertEquals("Invalid product id", response.getMessage());
+        assertEquals(true, response.getError());
+
         verify(productRepository, never()).findById(any());
     }
 
@@ -137,7 +150,10 @@ public class ProductServiceTest {
 
         ProductDetailResponse response = productService.getProduct(validProductId.toString());
 
-        assertNull(response);
+        assertNotNull(response);
+        assertEquals("Product not found", response.getMessage());
+        assertEquals(true, response.getError());
+
         verify(productRepository, times(1)).findById(validProductId);
     }
 
