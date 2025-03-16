@@ -134,7 +134,6 @@ public class CartServiceImpl implements CartService {
         BaseResponse response = new BaseResponse();
 
         try {
-            // Validate IDs
             UUID cartUuid = StringUtil.safeParseUUID(cartId);
             UUID productUuid = StringUtil.safeParseUUID(modifyCartRequest.getProductId());
 
@@ -144,7 +143,6 @@ public class CartServiceImpl implements CartService {
                 return response;
             }
 
-            // Check if cart exists
             Optional<Cart> cartOptional = cartRepository.findById(cartUuid);
             if (cartOptional.isEmpty()) {
                 response.setError(true);
@@ -154,14 +152,12 @@ public class CartServiceImpl implements CartService {
 
             Cart cart = cartOptional.get();
 
-            // Check if cart is active
             if (cart.getStatus() != Cart.CartStatus.ACTIVE) {
                 response.setError(true);
                 response.setMessage("Cannot modify items in a non-active cart");
                 return response;
             }
 
-            // Check if product exists
             Optional<Product> productOptional = productRepository.findById(productUuid);
             if (productOptional.isEmpty()) {
                 response.setError(true);
@@ -171,7 +167,6 @@ public class CartServiceImpl implements CartService {
 
             Product product = productOptional.get();
 
-            // Check if the item already exists in the cart
             CartItem cartItem = null;
             for (CartItem item : cart.getItems()) {
                 if (item.getProduct().getId().equals(productUuid)) {
@@ -180,10 +175,8 @@ public class CartServiceImpl implements CartService {
                 }
             }
 
-            // If item exists, update quantity, otherwise create new cart item
             if (cartItem != null) {
                 cartItem.setQuantity(modifyCartRequest.getQuantity());
-                // Remove item if quantity is 0
                 if (cartItem.getQuantity() == 0) {
                     cart.getItems().remove(cartItem);
                     response.setMessage("Item removed from cart");
@@ -191,7 +184,6 @@ public class CartServiceImpl implements CartService {
                     response.setMessage("Cart item quantity updated");
                 }
             } else {
-                // Only add if quantity > 0
                 if (modifyCartRequest.getQuantity() > 0) {
                     cartItem = new CartItem();
                     cartItem.setCart(cart);
@@ -204,7 +196,6 @@ public class CartServiceImpl implements CartService {
                 }
             }
 
-            // Save the cart with updated items
             cartRepository.save(cart);
 
         } catch (Exception e) {
@@ -222,7 +213,6 @@ public class CartServiceImpl implements CartService {
         BaseResponse response = new BaseResponse();
 
         try {
-            // Validate IDs
             UUID cartUuid = StringUtil.safeParseUUID(cartId);
             UUID productUuid = StringUtil.safeParseUUID(productId);
 
@@ -232,13 +222,11 @@ public class CartServiceImpl implements CartService {
                 return response;
             }
 
-            // Find the cart item directly using the repository
             Optional<CartItem> cartItemOptional = cartItemRepository.findByCartIdAndProductId(cartUuid, productUuid);
 
             if (cartItemOptional.isEmpty()) {
                 response.setMessage("Item not found in cart");
             } else {
-                // Delete using the repository - this will handle the version correctly
                 cartItemRepository.deleteCartItem(cartItemOptional.get().getId());
                 response.setMessage("Item successfully removed from cart");
             }
@@ -258,7 +246,6 @@ public class CartServiceImpl implements CartService {
         ReceiptResponse receiptResponse = new ReceiptResponse();
 
         try {
-            // Validate cart ID
             UUID cartUuid = StringUtil.safeParseUUID(cartId);
 
             if (cartUuid == null) {
@@ -267,7 +254,6 @@ public class CartServiceImpl implements CartService {
                 return receiptResponse;
             }
 
-            // Check if cart exists
             Optional<Cart> cartOptional = cartRepository.findById(cartUuid);
             if (cartOptional.isEmpty()) {
                 receiptResponse.setError(true);
@@ -277,7 +263,6 @@ public class CartServiceImpl implements CartService {
 
             Cart cart = cartOptional.get();
 
-            // Create receipt items from cart items
             List<ReceiptItem> receiptItems = new ArrayList<>();
             BigDecimal subtotal = BigDecimal.ZERO;
 
@@ -286,23 +271,19 @@ public class CartServiceImpl implements CartService {
                 int quantity = cartItem.getQuantity();
                 BigDecimal price = product.getPrice();
 
-                // Calculate item total before discount
                 BigDecimal itemSubtotal = price.multiply(BigDecimal.valueOf(quantity));
                 subtotal = subtotal.add(itemSubtotal);
 
-                // Create receipt item DTO
                 ReceiptItem receiptItem = new ReceiptItem();
                 receiptItem.setProductId(product.getId().toString());
                 receiptItem.setProductName(product.getProductName());
                 receiptItem.setQuantity(quantity);
                 receiptItem.setPrice(price);
 
-                // Find applicable discounts for this product
                 List<Discount> applicableDiscounts = discountRepository.findActiveDiscountsByProductId(product.getId());
 
                 if (!applicableDiscounts.isEmpty()) {
-                    // Apply the best discount (you could implement different strategies here)
-                    Discount bestDiscount = findBestDiscount(applicableDiscounts, quantity, price);
+                    Discount bestDiscount = applicableDiscounts.get(0);
 
                     if (bestDiscount != null) {
                         BigDecimal discountAmount = calculateDiscountAmount(bestDiscount, quantity, price);
@@ -311,7 +292,6 @@ public class CartServiceImpl implements CartService {
                         receiptItem.setDiscountAmount(discountAmount);
                         receiptItem.setFinalPrice(itemSubtotal.subtract(discountAmount));
 
-                        // Create applied discount DTO
                         AppliedDiscount appliedDiscount = new AppliedDiscount();
                         appliedDiscount.setDiscountName(bestDiscount.getDiscountName());
                         appliedDiscount.setDiscountAmount(discountAmount);
@@ -327,14 +307,12 @@ public class CartServiceImpl implements CartService {
                 receiptItems.add(receiptItem);
             }
 
-            // Calculate total with discounts applied
             BigDecimal totalDiscount = receiptItems.stream()
                     .map(item -> item.getDiscountAmount() != null ? item.getDiscountAmount() : BigDecimal.ZERO)
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
 
             BigDecimal finalTotal = subtotal.subtract(totalDiscount);
 
-            // Set receipt details
             receiptResponse.setCartId(cart.getId().toString());
             receiptResponse.setItems(receiptItems);
             receiptResponse.setSubtotal(subtotal);
@@ -351,52 +329,20 @@ public class CartServiceImpl implements CartService {
         return receiptResponse;
     }
 
-    // Helper method to find the best discount for a product
-    private Discount findBestDiscount(List<Discount> discounts, int quantity, BigDecimal price) {
-        if (discounts.isEmpty()) {
-            return null;
-        }
-
-        // Find discount that provides the maximum value
-        Discount bestDiscount = null;
-        BigDecimal maxDiscount = BigDecimal.ZERO;
-
-        for (Discount discount : discounts) {
-            if (!discount.isActive()) {
-                continue;
-            }
-
-            BigDecimal currentDiscountAmount = calculateDiscountAmount(discount, quantity, price);
-
-            if (currentDiscountAmount.compareTo(maxDiscount) > 0) {
-                maxDiscount = currentDiscountAmount;
-                bestDiscount = discount;
-            }
-        }
-
-        return bestDiscount;
-    }
-
-    // Helper method to calculate discount amount
     private BigDecimal calculateDiscountAmount(Discount discount, int quantity, BigDecimal price) {
-        // For "Buy 1 Get 50% Off Second" type discounts
         if (discount.getDiscountName().contains("Buy 1 Get 50% Off Second")) {
-            // Only apply if quantity is at least 2
             if (quantity >= 2) {
-                // Only the second item gets 50% off
                 return price.multiply(discount.getDiscountValue()).divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
             } else {
                 return BigDecimal.ZERO;
             }
         }
 
-        // For regular percentage discounts
         else if (discount.getDiscountType() == Discount.DiscountType.PERCENTAGE) {
             BigDecimal itemTotal = price.multiply(BigDecimal.valueOf(quantity));
             return itemTotal.multiply(discount.getDiscountValue()).divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
         }
 
-        // For fixed amount discounts
         else if (discount.getDiscountType() == Discount.DiscountType.FIXED_AMOUNT) {
             BigDecimal totalDiscount = discount.getDiscountValue().multiply(BigDecimal.valueOf(quantity));
             BigDecimal itemTotal = price.multiply(BigDecimal.valueOf(quantity));
