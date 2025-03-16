@@ -61,7 +61,6 @@ public class CartServiceTest {
         productId = UUID.randomUUID();
         cartItemId = UUID.randomUUID();
 
-        // Setup test product
         testProduct = new Product();
         testProduct.setId(productId);
         testProduct.setProductName("Test Product");
@@ -69,13 +68,11 @@ public class CartServiceTest {
         testProduct.setPrice(new BigDecimal("99.99"));
         testProduct.setStockQuantity(10);
 
-        // Setup test cart
         testCart = new Cart();
         testCart.setId(cartId);
         testCart.setUserId(userId);
         testCart.setStatus(Cart.CartStatus.ACTIVE);
 
-        // Setup test cart item
         testCartItem = new CartItem();
         testCartItem.setId(cartItemId);
         testCartItem.setCart(testCart);
@@ -86,7 +83,6 @@ public class CartServiceTest {
         items.add(testCartItem);
         testCart.setItems(items);
 
-        // Setup test discount
         testDiscount = new Discount();
         testDiscount.setId(UUID.randomUUID());
         testDiscount.setDiscountName("Buy 1 Get 50% Off Second");
@@ -99,7 +95,6 @@ public class CartServiceTest {
 
     @Test
     void createCart_Success() {
-        // Arrange
         CreateCartRequest request = new CreateCartRequest();
         request.setUserId(userId.toString());
 
@@ -111,11 +106,9 @@ public class CartServiceTest {
             savedCart.setId(cartId);
             return savedCart;
         });
-
-        // Act
+        
         CreateCartResponse response = cartService.createCart(request);
-
-        // Assert
+        
         assertFalse(response.getError());
         assertEquals("Successfully created cart.", response.getMessage());
         assertEquals(cartId.toString(), response.getCartId());
@@ -125,14 +118,11 @@ public class CartServiceTest {
 
     @Test
     void createCart_InvalidUserId() {
-        // Arrange
         CreateCartRequest request = new CreateCartRequest();
         request.setUserId("invalid-uuid");
 
-        // Act
         CreateCartResponse response = cartService.createCart(request);
 
-        // Assert
         assertTrue(response.getError());
         assertEquals("Invalid user id", response.getMessage());
         verify(cartRepository, never()).findCartByUserIdAndStatus(any(), any());
@@ -141,17 +131,14 @@ public class CartServiceTest {
 
     @Test
     void createCart_ActiveCartExists() {
-        // Arrange
         CreateCartRequest request = new CreateCartRequest();
         request.setUserId(userId.toString());
 
         when(cartRepository.findCartByUserIdAndStatus(userId, Cart.CartStatus.ACTIVE))
                 .thenReturn(Optional.of(testCart));
-
-        // Act
+        
         CreateCartResponse response = cartService.createCart(request);
 
-        // Assert
         assertFalse(response.getError());
         assertEquals("Active cart already exists.", response.getMessage());
         assertEquals(cartId.toString(), response.getCartId());
@@ -161,17 +148,14 @@ public class CartServiceTest {
 
     @Test
     void createCart_RepositoryException() {
-        // Arrange
         CreateCartRequest request = new CreateCartRequest();
         request.setUserId(userId.toString());
 
         when(cartRepository.findCartByUserIdAndStatus(userId, Cart.CartStatus.ACTIVE))
                 .thenThrow(new RuntimeException("Database error"));
 
-        // Act
         CreateCartResponse response = cartService.createCart(request);
 
-        // Assert
         assertTrue(response.getError());
         assertEquals("Error occurred while creating the cart", response.getMessage());
         verify(cartRepository, times(1)).findCartByUserIdAndStatus(userId, Cart.CartStatus.ACTIVE);
@@ -180,13 +164,10 @@ public class CartServiceTest {
 
     @Test
     void getCart_Success() {
-        // Arrange
         when(cartRepository.findById(cartId)).thenReturn(Optional.of(testCart));
 
-        // Act
         GetCartResponse response = cartService.getCart(cartId.toString());
 
-        // Assert
         assertFalse(response.getError());
         assertEquals("Successfully retrieved cart.", response.getMessage());
         assertEquals(cartId.toString(), response.getCartId());
@@ -204,10 +185,8 @@ public class CartServiceTest {
 
     @Test
     void getCart_InvalidCartId() {
-        // Act
         GetCartResponse response = cartService.getCart("invalid-uuid");
 
-        // Assert
         assertTrue(response.getError());
         assertEquals("Invalid cart ID format", response.getMessage());
         verify(cartRepository, never()).findById(any());
@@ -215,13 +194,10 @@ public class CartServiceTest {
 
     @Test
     void getCart_CartNotFound() {
-        // Arrange
         when(cartRepository.findById(cartId)).thenReturn(Optional.empty());
 
-        // Act
         GetCartResponse response = cartService.getCart(cartId.toString());
 
-        // Assert
         assertTrue(response.getError());
         assertEquals("Cart not found", response.getMessage());
         verify(cartRepository, times(1)).findById(cartId);
@@ -229,13 +205,10 @@ public class CartServiceTest {
 
     @Test
     void getCart_RepositoryException() {
-        // Arrange
         when(cartRepository.findById(cartId)).thenThrow(new RuntimeException("Database error"));
 
-        // Act
         GetCartResponse response = cartService.getCart(cartId.toString());
 
-        // Assert
         assertTrue(response.getError());
         assertEquals("Error occurred while retrieving the cart", response.getMessage());
         verify(cartRepository, times(1)).findById(cartId);
@@ -243,12 +216,10 @@ public class CartServiceTest {
 
     @Test
     void addItemToCart_AddNewItem() {
-        // Arrange
         ModifyCartRequest request = new ModifyCartRequest();
         request.setProductId(productId.toString());
         request.setQuantity(3);
 
-        // Use a cart with no items initially
         Cart emptyCart = new Cart();
         emptyCart.setId(cartId);
         emptyCart.setUserId(userId);
@@ -259,10 +230,8 @@ public class CartServiceTest {
         when(productRepository.findById(productId)).thenReturn(Optional.of(testProduct));
         when(cartRepository.save(any(Cart.class))).thenReturn(emptyCart);
 
-        // Act
         BaseResponse response = cartService.addItemToCart(cartId.toString(), request);
 
-        // Assert
         assertFalse(response.getError());
         assertEquals("Item added to cart", response.getMessage());
         assertEquals(1, emptyCart.getItems().size());
@@ -276,19 +245,16 @@ public class CartServiceTest {
 
     @Test
     void addItemToCart_UpdateExistingItem() {
-        // Arrange
         ModifyCartRequest request = new ModifyCartRequest();
         request.setProductId(productId.toString());
-        request.setQuantity(5); // Updating from 2 to 5
+        request.setQuantity(5);
 
         when(cartRepository.findById(cartId)).thenReturn(Optional.of(testCart));
         when(productRepository.findById(productId)).thenReturn(Optional.of(testProduct));
         when(cartRepository.save(any(Cart.class))).thenReturn(testCart);
 
-        // Act
         BaseResponse response = cartService.addItemToCart(cartId.toString(), request);
 
-        // Assert
         assertFalse(response.getError());
         assertEquals("Cart item quantity updated", response.getMessage());
         assertEquals(1, testCart.getItems().size());
@@ -301,19 +267,16 @@ public class CartServiceTest {
 
     @Test
     void addItemToCart_RemoveItemWithZeroQuantity() {
-        // Arrange
         ModifyCartRequest request = new ModifyCartRequest();
         request.setProductId(productId.toString());
-        request.setQuantity(0); // Setting to 0 should remove the item
+        request.setQuantity(0);
 
         when(cartRepository.findById(cartId)).thenReturn(Optional.of(testCart));
         when(productRepository.findById(productId)).thenReturn(Optional.of(testProduct));
         when(cartRepository.save(any(Cart.class))).thenReturn(testCart);
 
-        // Act
         BaseResponse response = cartService.addItemToCart(cartId.toString(), request);
 
-        // Assert
         assertFalse(response.getError());
         assertEquals("Item removed from cart", response.getMessage());
         assertTrue(testCart.getItems().isEmpty());
@@ -325,15 +288,12 @@ public class CartServiceTest {
 
     @Test
     void addItemToCart_InvalidCartId() {
-        // Arrange
         ModifyCartRequest request = new ModifyCartRequest();
         request.setProductId(productId.toString());
         request.setQuantity(3);
 
-        // Act
         BaseResponse response = cartService.addItemToCart("invalid-uuid", request);
 
-        // Assert
         assertTrue(response.getError());
         assertEquals("Invalid cart ID or product ID format", response.getMessage());
 
@@ -344,15 +304,12 @@ public class CartServiceTest {
 
     @Test
     void addItemToCart_InvalidProductId() {
-        // Arrange
         ModifyCartRequest request = new ModifyCartRequest();
         request.setProductId("invalid-uuid");
         request.setQuantity(3);
 
-        // Act
         BaseResponse response = cartService.addItemToCart(cartId.toString(), request);
 
-        // Assert
         assertTrue(response.getError());
         assertEquals("Invalid cart ID or product ID format", response.getMessage());
 
@@ -363,17 +320,14 @@ public class CartServiceTest {
 
     @Test
     void addItemToCart_CartNotFound() {
-        // Arrange
         ModifyCartRequest request = new ModifyCartRequest();
         request.setProductId(productId.toString());
         request.setQuantity(3);
 
         when(cartRepository.findById(cartId)).thenReturn(Optional.empty());
 
-        // Act
         BaseResponse response = cartService.addItemToCart(cartId.toString(), request);
 
-        // Assert
         assertTrue(response.getError());
         assertEquals("Cart not found", response.getMessage());
 
@@ -384,7 +338,6 @@ public class CartServiceTest {
 
     @Test
     void addItemToCart_ProductNotFound() {
-        // Arrange
         ModifyCartRequest request = new ModifyCartRequest();
         request.setProductId(productId.toString());
         request.setQuantity(3);
@@ -392,10 +345,8 @@ public class CartServiceTest {
         when(cartRepository.findById(cartId)).thenReturn(Optional.of(testCart));
         when(productRepository.findById(productId)).thenReturn(Optional.empty());
 
-        // Act
         BaseResponse response = cartService.addItemToCart(cartId.toString(), request);
 
-        // Assert
         assertTrue(response.getError());
         assertEquals("Product not found", response.getMessage());
 
@@ -406,12 +357,10 @@ public class CartServiceTest {
 
     @Test
     void addItemToCart_NonActiveCart() {
-        // Arrange
         ModifyCartRequest request = new ModifyCartRequest();
         request.setProductId(productId.toString());
         request.setQuantity(3);
 
-        // Create a completed cart
         Cart completedCart = new Cart();
         completedCart.setId(cartId);
         completedCart.setUserId(userId);
@@ -419,10 +368,8 @@ public class CartServiceTest {
 
         when(cartRepository.findById(cartId)).thenReturn(Optional.of(completedCart));
 
-        // Act
         BaseResponse response = cartService.addItemToCart(cartId.toString(), request);
-
-        // Assert
+        
         assertTrue(response.getError());
         assertEquals("Cannot modify items in a non-active cart", response.getMessage());
 
@@ -433,15 +380,12 @@ public class CartServiceTest {
 
     @Test
     void removeItemFromCart_Success() {
-        // Arrange
         when(cartItemRepository.findByCartIdAndProductId(cartId, productId))
                 .thenReturn(Optional.of(testCartItem));
         when(cartItemRepository.deleteCartItem(cartItemId)).thenReturn(1);
 
-        // Act
         BaseResponse response = cartService.removeItemFromCart(cartId.toString(), productId.toString());
 
-        // Assert
         assertFalse(response.getError());
         assertEquals("Item successfully removed from cart", response.getMessage());
 
@@ -451,14 +395,11 @@ public class CartServiceTest {
 
     @Test
     void removeItemFromCart_ItemNotFound() {
-        // Arrange
         when(cartItemRepository.findByCartIdAndProductId(cartId, productId))
                 .thenReturn(Optional.empty());
 
-        // Act
         BaseResponse response = cartService.removeItemFromCart(cartId.toString(), productId.toString());
 
-        // Assert
         assertFalse(response.getError());
         assertEquals("Item not found in cart", response.getMessage());
 
@@ -468,10 +409,8 @@ public class CartServiceTest {
 
     @Test
     void removeItemFromCart_InvalidIds() {
-        // Act
         BaseResponse response = cartService.removeItemFromCart("invalid-uuid", productId.toString());
 
-        // Assert
         assertTrue(response.getError());
         assertEquals("Invalid cart ID or product ID format", response.getMessage());
 
@@ -481,20 +420,16 @@ public class CartServiceTest {
 
     @Test
     void getReceipt_Success() {
-        // Arrange
         when(cartRepository.findById(cartId)).thenReturn(Optional.of(testCart));
         when(discountRepository.findActiveDiscountsByProductId(productId))
                 .thenReturn(Collections.singletonList(testDiscount));
 
-        // Act
         ReceiptResponse response = cartService.getReceipt(cartId.toString());
 
-        // Assert
         assertFalse(response.getError());
         assertEquals("Receipt generated successfully", response.getMessage());
         assertEquals(cartId.toString(), response.getCartId());
 
-        // Verify items
         assertEquals(1, response.getItems().size());
         ReceiptItem item = response.getItems().get(0);
         assertEquals(productId.toString(), item.getProductId());
@@ -525,15 +460,12 @@ public class CartServiceTest {
 
     @Test
     void getReceipt_NoDiscounts() {
-        // Arrange
         when(cartRepository.findById(cartId)).thenReturn(Optional.of(testCart));
         when(discountRepository.findActiveDiscountsByProductId(productId))
                 .thenReturn(Collections.emptyList());
 
-        // Act
         ReceiptResponse response = cartService.getReceipt(cartId.toString());
 
-        // Assert
         assertFalse(response.getError());
         assertEquals("Receipt generated successfully", response.getMessage());
 
@@ -555,10 +487,8 @@ public class CartServiceTest {
 
     @Test
     void getReceipt_InvalidCartId() {
-        // Act
         ReceiptResponse response = cartService.getReceipt("invalid-uuid");
 
-        // Assert
         assertTrue(response.getError());
         assertEquals("Invalid cart ID format", response.getMessage());
 
@@ -568,13 +498,10 @@ public class CartServiceTest {
 
     @Test
     void getReceipt_CartNotFound() {
-        // Arrange
         when(cartRepository.findById(cartId)).thenReturn(Optional.empty());
 
-        // Act
         ReceiptResponse response = cartService.getReceipt(cartId.toString());
 
-        // Assert
         assertTrue(response.getError());
         assertEquals("Cart not found", response.getMessage());
 
@@ -584,7 +511,6 @@ public class CartServiceTest {
 
     @Test
     void getReceipt_EmptyCart() {
-        // Arrange
         Cart emptyCart = new Cart();
         emptyCart.setId(cartId);
         emptyCart.setUserId(userId);
@@ -593,10 +519,8 @@ public class CartServiceTest {
 
         when(cartRepository.findById(cartId)).thenReturn(Optional.of(emptyCart));
 
-        // Act
         ReceiptResponse response = cartService.getReceipt(cartId.toString());
 
-        // Assert
         assertFalse(response.getError());
         assertEquals("Receipt generated successfully", response.getMessage());
         assertEquals(cartId.toString(), response.getCartId());
@@ -611,8 +535,6 @@ public class CartServiceTest {
 
     @Test
     void getReceipt_MultipleItems() {
-        // Arrange
-        // Create a second product
         UUID product2Id = UUID.randomUUID();
         Product product2 = new Product();
         product2.setId(product2Id);
@@ -621,17 +543,14 @@ public class CartServiceTest {
         product2.setPrice(new BigDecimal("49.99"));
         product2.setStockQuantity(5);
 
-        // Create a second cart item
         CartItem cartItem2 = new CartItem();
         cartItem2.setId(UUID.randomUUID());
         cartItem2.setCart(testCart);
         cartItem2.setProduct(product2);
         cartItem2.setQuantity(3);
 
-        // Add the second item to the cart
         testCart.getItems().add(cartItem2);
 
-        // Create a discount for the second product
         Discount discount2 = new Discount();
         discount2.setId(UUID.randomUUID());
         discount2.setDiscountName("10% Off");
@@ -647,14 +566,11 @@ public class CartServiceTest {
         when(discountRepository.findActiveDiscountsByProductId(product2Id))
                 .thenReturn(Collections.singletonList(discount2));
 
-        // Act
         ReceiptResponse response = cartService.getReceipt(cartId.toString());
 
-        // Assert
         assertFalse(response.getError());
         assertEquals("Receipt generated successfully", response.getMessage());
 
-        // Verify items count
         assertEquals(2, response.getItems().size());
 
         // Calculate expected values:
@@ -672,7 +588,6 @@ public class CartServiceTest {
         assertEquals(expectedDiscount.doubleValue(), response.getTotalDiscount().doubleValue(), 0.01);
         assertEquals(expectedTotal.doubleValue(), response.getFinalTotal().doubleValue(), 0.01);
 
-        // Verify 2 applied discounts
         assertEquals(2, response.getAppliedDiscounts().size());
 
         verify(cartRepository, times(1)).findById(cartId);
@@ -682,13 +597,10 @@ public class CartServiceTest {
 
     @Test
     void getReceipt_RepositoryException() {
-        // Arrange
         when(cartRepository.findById(cartId)).thenThrow(new RuntimeException("Database error"));
-
-        // Act
+        
         ReceiptResponse response = cartService.getReceipt(cartId.toString());
-
-        // Assert
+        
         assertTrue(response.getError());
         assertEquals("Error occurred while generating receipt", response.getMessage());
 
