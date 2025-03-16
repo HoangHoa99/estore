@@ -3,7 +3,7 @@ package assessment.estore.model.dto.response;
 
 import java.math.BigDecimal;
 
-public class ProductDetailResponse {
+public class ProductDetailResponse extends BaseResponse {
     private String productId;
     private String productName;
     private String productDescription;

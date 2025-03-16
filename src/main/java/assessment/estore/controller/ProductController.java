@@ -6,11 +6,12 @@ import assessment.estore.model.dto.response.GetProductsResponse;
 import assessment.estore.model.dto.response.ProductDetailResponse;
 import assessment.estore.service.ProductService;
 import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("product")
+@RequestMapping("products")
 public class ProductController {
 
     private final ProductService productService;
@@ -20,26 +21,41 @@ public class ProductController {
     }
 
     @PostMapping
-    ResponseEntity<?> createProduct(@Valid @RequestBody CreateProductRequest createProductRequest) {
+    ResponseEntity<BaseResponse> createProduct(@Valid @RequestBody CreateProductRequest createProductRequest) {
         BaseResponse res = productService.createProduct(createProductRequest);
-        return ResponseEntity.ok(res);
+
+        if (res.getError()) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(res);
+        }
+
+        return ResponseEntity.status(HttpStatus.CREATED).body(res);
     }
 
     @GetMapping
-    ResponseEntity<?> getProducts(@RequestParam("page") int page, @RequestParam("size") int size) {
+    ResponseEntity<GetProductsResponse> getProducts(@RequestParam("page") int page, @RequestParam("size") int size) {
         GetProductsResponse response = productService.getProducts(page, size);
         return ResponseEntity.ok(response);
     }
 
     @GetMapping("/{productId}")
-    ResponseEntity<?> getProductDetail(@PathVariable("productId") String productId) {
+    ResponseEntity<ProductDetailResponse> getProductDetail(@PathVariable("productId") String productId) {
         ProductDetailResponse response = productService.getProduct(productId);
+
+        if (response.getError()) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+        }
+
         return ResponseEntity.ok(response);
     }
 
     @DeleteMapping("/{productId}")
-    ResponseEntity<?> deleteProduct(@PathVariable("productId") String productId) {
+    ResponseEntity<BaseResponse> deleteProduct(@PathVariable("productId") String productId) {
         Boolean response = productService.deleteProduct(productId);
-        return ResponseEntity.ok(response);
+
+        if (!response) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new BaseResponse("Failed to delete product", true));
+        }
+
+        return ResponseEntity.status(HttpStatus.NO_CONTENT).body(new BaseResponse("Product deleted successfully"));
     }
 }

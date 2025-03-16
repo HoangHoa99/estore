@@ -86,14 +86,22 @@ public class ProductServiceImpl implements ProductService {
     public ProductDetailResponse getProduct(String productId) {
         UUID uuid = StringUtil.safeParseUUID(productId);
         if (uuid == null) {
-            return null;
+            ProductDetailResponse response = new ProductDetailResponse();
+            response.setMessage("Invalid product id");
+            response.setError(true);
+
+            return response;
         }
 
         lock.readLock().lock();
         try {
             Product product = productRepository.findById(uuid).orElse(null);
             if(product == null) {
-                return null;
+                ProductDetailResponse response = new ProductDetailResponse();
+                response.setMessage("Product not found");
+                response.setError(true);
+
+                return response;
             }
             return buildDetailItem(product);
         } finally {

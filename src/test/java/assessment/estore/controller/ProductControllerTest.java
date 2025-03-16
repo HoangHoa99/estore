@@ -43,6 +43,7 @@ public class ProductControllerTest {
     private ProductDetailResponse productDetailResponse;
     private GetProductsResponse getProductsResponse;
     private String productId;
+    private ProductDetailResponse productNotFound;
 
     @BeforeEach
     void setUp() {
@@ -69,16 +70,20 @@ public class ProductControllerTest {
 
         getProductsResponse = new GetProductsResponse();
         getProductsResponse.setProducts(Collections.singletonList(productDetailResponse));
+
+        productNotFound = new ProductDetailResponse();
+        productNotFound.setError(true);
+        productNotFound.setMessage("Product not found");
     }
 
     @Test
     void createProduct_Success() throws Exception {
         when(productService.createProduct(any(CreateProductRequest.class))).thenReturn(baseResponse);
 
-        mockMvc.perform(post("/product")
+        mockMvc.perform(post("/products")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(createProductRequest)))
-                .andExpect(status().isOk())
+                .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.message").value("Product created successfully"))
                 .andExpect(jsonPath("$.error").value(false));
     }
@@ -87,7 +92,7 @@ public class ProductControllerTest {
     void getProducts_Success() throws Exception {
         when(productService.getProducts(eq(0), eq(10))).thenReturn(getProductsResponse);
 
-        mockMvc.perform(get("/product")
+        mockMvc.perform(get("/products")
                         .param("page", "0")
                         .param("size", "10"))
                 .andExpect(status().isOk())
@@ -100,7 +105,7 @@ public class ProductControllerTest {
     void getProductDetail_Success() throws Exception {
         when(productService.getProduct(eq(productId))).thenReturn(productDetailResponse);
 
-        mockMvc.perform(get("/product/{productId}", productId))
+        mockMvc.perform(get("/products/{productId}", productId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.productId").value(productId))
                 .andExpect(jsonPath("$.productName").value("Test Product"))
@@ -111,29 +116,32 @@ public class ProductControllerTest {
 
     @Test
     void getProductDetail_NotFound() throws Exception {
-        when(productService.getProduct(eq(productId))).thenReturn(null);
+        when(productService.getProduct(eq(productId))).thenReturn(productNotFound);
 
-        mockMvc.perform(get("/product/{productId}", productId))
-                .andExpect(status().isOk())
-                .andExpect(content().string(""));
+        mockMvc.perform(get("/products/{productId}", productId))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value(true))
+                .andExpect(jsonPath("$.message").value("Product not found"));
     }
 
     @Test
     void deleteProduct_Success() throws Exception {
         when(productService.deleteProduct(eq(productId))).thenReturn(true);
 
-        mockMvc.perform(delete("/product/{productId}", productId))
-                .andExpect(status().isOk())
-                .andExpect(content().string("true"));
+        mockMvc.perform(delete("/products/{productId}", productId))
+                .andExpect(status().isNoContent())
+                .andExpect(jsonPath("$.error").value(false))
+                .andExpect(jsonPath("$.message").value("Product deleted successfully"));
     }
 
     @Test
     void deleteProduct_NotFound() throws Exception {
         when(productService.deleteProduct(eq(productId))).thenReturn(false);
 
-        mockMvc.perform(delete("/product/{productId}", productId))
-                .andExpect(status().isOk())
-                .andExpect(content().string("false"));
+        mockMvc.perform(delete("/products/{productId}", productId))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value(true))
+                .andExpect(jsonPath("$.message").value("Failed to delete product"));
     }
 
     @Test
@@ -142,7 +150,7 @@ public class ProductControllerTest {
         invalidRequest.setPrice(new BigDecimal("99.99"));
         invalidRequest.setStockQuantity(10);
 
-        mockMvc.perform(post("/product")
+        mockMvc.perform(post("/products")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(invalidRequest)))
                 .andExpect(status().isBadRequest());
@@ -150,7 +158,7 @@ public class ProductControllerTest {
 
     @Test
     void getProducts_InvalidParameters() throws Exception {
-        mockMvc.perform(get("/product")
+        mockMvc.perform(get("/products")
                         .param("page", "invalid")
                         .param("size", "10"))
                 .andExpect(status().isBadRequest());
