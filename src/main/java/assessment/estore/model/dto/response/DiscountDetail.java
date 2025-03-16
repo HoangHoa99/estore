@@ -46,7 +46,7 @@ public class DiscountDetail {
         this.discountType = discountType;
     }
 
-    public Boolean getActive() {
+    public Boolean isActive() {
         return isActive;
     }
 
